@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Radar — pre-token protocols, ranked by implied value</title>
+<link rel="stylesheet" href="app.css">
+<script src="../data.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <p class="kicker">TOKEN RADAR &middot; DEFI LLAMA SNAPSHOT <span id="asof"></span></p>
+    <h1>Which protocol without a token is worth the most?</h1>
+    <p class="lede">Every pre-token protocol in the snapshot, ranked by the value its own figures imply:
+    its TVL, its seven-day growth, how long it has run with no token, and what its
+    category's tokens actually trade at. Nothing here is a prediction that a token
+    will launch, or when &mdash; only what one would be worth if it did, on the record as it stands.</p>
+    <dl class="stats" id="stats"></dl>
+  </div>
+</header>
+<nav class="tabs wrap" id="tabs">
+  <button data-tab="board" class="on">Board</button>
+  <button data-tab="live">Live tokens</button>
+  <button data-tab="method">Method &amp; validation</button>
+</nav>
+<main class="wrap">
+  <section id="view-board">
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Search a protocol&hellip;" aria-label="Search">
+      <select id="cat" aria-label="Category"><option value="">All categories</option></select>
+      <select id="chain" aria-label="Chain"><option value="">All chains</option></select>
+      <label class="check"><input id="watch" type="checkbox"> Watchlist only</label>
+      <select id="sort" aria-label="Sort">
+        <option value="rank">Sort: rank</option>
+        <option value="implied">Sort: implied value</option>
+        <option value="tvl">Sort: TVL</option>
+        <option value="growth">Sort: 7-day growth</option>
+        <option value="name">Sort: name</option>
+      </select>
+    </div>
+    <p class="count" id="count"></p>
+    <div class="tablewrap">
+      <table id="board">
+        <thead><tr>
+          <th>#</th><th>Protocol</th><th>Category</th><th>Chains</th>
+          <th class="num">TVL</th><th class="num">7d</th><th class="num">Implied value</th><th class="num">Value / TVL</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="note">Implied value is the model's claim, not a market price. A protocol that
+    records no token may still have one its DefiLlama record does not carry; the board
+    ranks the record, not a rumour. Click any row for its detail and farm plan.</p>
+  </section>
+  <section id="view-detail" hidden>
+    <button class="back" id="back">&larr; Back to the board</button>
+    <article id="detail"></article>
+  </section>
+  <section id="view-live" hidden>
+    <h2>Live tokens: what the market already pays</h2>
+    <p>These protocols already have a token, so the board shows the market's own value
+    for them, never a model's. They are also the comps the model learns from: 128
+    token-bearing protocols in this snapshot. Their market-cap-to-TVL ratios are the
+    evidence behind every implied value on the board.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Protocol</th><th>Category</th><th class="num">TVL</th><th class="num">Market cap</th><th class="num">Mcap / TVL</th><th class="num">7d</th></tr></thead>
+        <tbody id="live-rows"></tbody>
+      </table>
+    </div>
+  </section>
+  <section id="view-method" hidden>
+    <h2>How the value is built</h2>
+    <p>The model is fit at run time from the snapshot's own token-bearing protocols.
+    No protocol name is ever special-cased: the same function scores every row.</p>
+    <ol class="steps">
+      <li><b>The curve.</b> On the 128 comps, ln(market cap) is regressed on ln(TVL):
+      ln(mcap) = <span id="m-curve"></span>. A protocol twice as big is worth about
+      1.4&times; as much, not twice &mdash; the market pays less per dollar of TVL as
+      protocols grow.</li>
+      <li><b>The group.</b> Near-duplicate categories are pooled (bridges together,
+      staking together, yield together, lending together, dexes together). Each group's
+      offset is the shrunk median of its curve residuals, pulled toward the global
+      median by its size. Bridge protocols trade rich, staking protocols trade cheap;
+      the board prices that in instead of pretending every category is one market.</li>
+      <li><b>The second opinion.</b> A median (L1) regression on TVL, category,
+      seven-day growth, log age, chain count and chain flags reads what the curve
+      cannot see: growth, age and chains. Ridge penalty 10, fit by iteratively
+      reweighted least squares.</li>
+      <li><b>The blend.</b> Implied value = 0.9 &times; grouped curve + 0.1 &times;
+      second opinion, exponentiated. The curve carries the ranking; the second
+      opinion corrects it where growth, age or chains say otherwise. The weight
+      was chosen by a sweep, not by taste: 0.9/0.1 has the best five-fold
+      cross-validation (1.266 vs 1.268 for the grouped curve alone and 1.273 for
+      v3&rsquo;s 0.8/0.2) and the best blind hold-out (35% of predictions inside
+      &plusmn;30%, median error &minus;5.5%, vs 29% and &minus;6.4% for 0.8/0.2);
+      more weight on the second opinion improves walk-forward but costs
+      cross-validation and the blind set, so the curve stays in charge.</li>
+    </ol>
+    <h3>Validation, same protocol for every number</h3>
+    <p>Median absolute log error of ln(market cap) on the snapshot's token-bearing
+    protocols. The baseline is the single global curve the board replaces.</p>
+    <table class="valid">
+      <thead><tr><th>Check</th><th class="num">This model</th><th class="num">Baseline curve</th></tr></thead>
+      <tbody id="valid-rows"></tbody>
+    </table>
+    <p class="note">5-fold cross-validation, five seeds, stratified by category. Walk-forward
+    trains on the oldest 70% by listing date and tests on the newest 30% &mdash; the
+    closest analogue to a protocol that has not launched yet. The blind hold-out is
+    a frozen 20% stratified split, never used while the model was built.</p>
+    <h3>Group offsets</h3>
+    <p>What each pooled group's tokens trade at, relative to the global curve
+    (log points; +0.68 is about twice the curve's value, &minus;0.73 about half).</p>
+    <table class="valid"><thead><tr><th>Group</th><th class="num">Comps</th><th class="num">Offset</th></tr></thead>
+    <tbody id="group-rows"></tbody></table>
+    <h3>Farm plans</h3>
+    <p>Every row carries six steps: a fresh wallet, one category-specific action with
+    its capital and gas, a weekly qualifying action, a hold of 30 to 60 days by the
+    protocol's age, a check of the protocol's own points page before withdrawing,
+    and a farm log. Costs and times are in each step; nothing here is financial advice.</p>
+  </section>
+</main>
+<footer class="wrap">
+  <p>Data: DefiLlama protocols endpoint, frozen snapshot <span id="src"></span>. Model
+  radar-4, fit from the snapshot at run time. Entered on make.fun.</p>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>
